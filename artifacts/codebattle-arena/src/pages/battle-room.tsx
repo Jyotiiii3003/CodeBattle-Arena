@@ -56,12 +56,18 @@ export default function BattleRoom() {
     }
   }, [problem, language]);
 
+  // Broadcast code changes to spectators
+  useEffect(() => {
+    if (!socket || !user || !battleId || !code) return;
+    socket.emit("codeUpdate", { battleId, userId: user.id, code, language });
+  }, [code, language]);
+
   // Socket setup
   useEffect(() => {
     if (!token || !battleId || !user) return;
 
-    const newSocket = io(import.meta.env.BASE_URL || window.location.origin, {
-      path: "/api/socket.io"
+    const newSocket = io(window.location.origin, {
+      path: "/ws/socket.io",
     });
 
     newSocket.on("connect", () => {

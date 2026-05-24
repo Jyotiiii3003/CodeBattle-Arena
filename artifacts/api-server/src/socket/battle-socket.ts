@@ -6,6 +6,12 @@ import { verifyToken } from "../lib/auth";
 import { updateElo } from "../lib/elo";
 import { logger } from "../lib/logger";
 
+interface PlayerCodeState {
+  code: string;
+  language: string;
+  lastVerdict?: string;
+}
+
 interface BattleRoom {
   player1SocketId?: string;
   player2SocketId?: string;
@@ -13,12 +19,31 @@ interface BattleRoom {
   player2UserId?: number;
   startTime?: Date;
   timerInterval?: ReturnType<typeof setInterval>;
+  spectatorSocketIds: Set<string>;
+  spectatorUsernames: Map<string, string>;
+  playerCode: Map<number, PlayerCodeState>;
 }
 
 const battleRooms = new Map<number, BattleRoom>();
 
 export function getBattleSocketState() {
   return battleRooms;
+}
+
+export function getActiveBattleSpectatorCounts(): Map<number, number> {
+  const counts = new Map<number, number>();
+  for (const [battleId, room] of battleRooms.entries()) {
+    counts.set(battleId, room.spectatorSocketIds.size);
+  }
+  return counts;
+}
+
+function createRoom(): BattleRoom {
+  return {
+    spectatorSocketIds: new Set(),
+    spectatorUsernames: new Map(),
+    playerCode: new Map(),
+  };
 }
 
 export function initSocket(server: HttpServer): SocketIOServer {
@@ -30,9 +55,11 @@ export function initSocket(server: HttpServer): SocketIOServer {
   io.on("connection", (socket: Socket) => {
     logger.info({ socketId: socket.id }, "Socket connected");
 
-    socket.on("joinRoom", async ({ battleId, userId, token }: { battleId: number; userId: number; token?: string }) => {
+    // ── Player joins their own battle ────────────────────────────────────────
+    socket.on("joinRoom", async ({
+      battleId, userId, token,
+    }: { battleId: number; userId: number; token?: string }) => {
       try {
-        // Verify auth if token provided
         if (token) {
           const payload = verifyToken(token);
           if (payload.userId !== userId) {
@@ -55,7 +82,7 @@ export function initSocket(server: HttpServer): SocketIOServer {
         socket.join(`battle:${battleId}`);
 
         if (!battleRooms.has(battleId)) {
-          battleRooms.set(battleId, {});
+          battleRooms.set(battleId, createRoom());
         }
 
         const room = battleRooms.get(battleId)!;
@@ -70,7 +97,12 @@ export function initSocket(server: HttpServer): SocketIOServer {
 
         logger.info({ battleId, userId }, "Player joined room");
 
-        // If both players connected and battle is active, emit start
+        // Send existing code state to reconnecting player
+        const myCode = room.playerCode.get(userId);
+        if (myCode) {
+          socket.emit("codeState", { userId, ...myCode });
+        }
+
         if (battle.status === "active" && room.player1SocketId && room.player2SocketId) {
           io.to(`battle:${battleId}`).emit("battleStarted", {
             battleId,
@@ -79,15 +111,94 @@ export function initSocket(server: HttpServer): SocketIOServer {
         }
 
         socket.emit("joinedRoom", { battleId, status: battle.status });
+
+        // Broadcast updated spectator count
+        io.to(`battle:${battleId}`).emit("spectatorCount", {
+          count: room.spectatorSocketIds.size,
+        });
       } catch (err) {
         logger.error({ err }, "joinRoom error");
         socket.emit("error", { message: "Failed to join room" });
       }
     });
 
-    socket.on("submitBattle", async ({ battleId, userId, submissionId }: { battleId: number; userId: number; submissionId: number }) => {
+    // ── Spectator joins to watch ─────────────────────────────────────────────
+    socket.on("spectate", async ({
+      battleId, username,
+    }: { battleId: number; username?: string }) => {
       try {
-        // Poll for verdict
+        const [battle] = await db
+          .select()
+          .from(battlesTable)
+          .where(eq(battlesTable.id, battleId))
+          .limit(1);
+
+        if (!battle) {
+          socket.emit("error", { message: "Battle not found" });
+          return;
+        }
+
+        if (battle.status === "finished") {
+          socket.emit("error", { message: "Battle already finished" });
+          return;
+        }
+
+        socket.join(`battle:${battleId}`);
+
+        if (!battleRooms.has(battleId)) {
+          battleRooms.set(battleId, createRoom());
+        }
+
+        const room = battleRooms.get(battleId)!;
+        room.spectatorSocketIds.add(socket.id);
+        room.spectatorUsernames.set(socket.id, username ?? "Guest");
+
+        logger.info({ battleId, spectatorSocketId: socket.id, username }, "Spectator joined");
+
+        // Send current code state to the new spectator
+        for (const [playerId, state] of room.playerCode.entries()) {
+          socket.emit("codeUpdate", { userId: playerId, ...state });
+        }
+
+        socket.emit("spectating", {
+          battleId,
+          status: battle.status,
+          spectatorCount: room.spectatorSocketIds.size,
+        });
+
+        // Broadcast updated spectator count to the whole room
+        io.to(`battle:${battleId}`).emit("spectatorCount", {
+          count: room.spectatorSocketIds.size,
+        });
+      } catch (err) {
+        logger.error({ err }, "spectate error");
+        socket.emit("error", { message: "Failed to spectate" });
+      }
+    });
+
+    // ── Player broadcasts their code to spectators ───────────────────────────
+    socket.on("codeUpdate", ({
+      battleId, userId, code, language,
+    }: { battleId: number; userId: number; code: string; language: string }) => {
+      const room = battleRooms.get(battleId);
+      if (!room) return;
+
+      // Update stored code state
+      room.playerCode.set(userId, {
+        code,
+        language,
+        lastVerdict: room.playerCode.get(userId)?.lastVerdict,
+      });
+
+      // Forward to spectators (not back to the player who sent it)
+      socket.to(`battle:${battleId}`).emit("codeUpdate", { userId, code, language });
+    });
+
+    // ── Player submits ────────────────────────────────────────────────────────
+    socket.on("submitBattle", async ({
+      battleId, userId, submissionId,
+    }: { battleId: number; userId: number; submissionId: number }) => {
+      try {
         const maxAttempts = 15;
         let submission;
         for (let i = 0; i < maxAttempts; i++) {
@@ -108,7 +219,15 @@ export function initSocket(server: HttpServer): SocketIOServer {
           return;
         }
 
-        // Broadcast verdict to room
+        // Update stored verdict for spectators
+        const room = battleRooms.get(battleId);
+        if (room) {
+          const existing = room.playerCode.get(userId);
+          if (existing) {
+            existing.lastVerdict = submission.verdict;
+          }
+        }
+
         io.to(`battle:${battleId}`).emit("opponentSubmitted", {
           userId,
           verdict: submission.verdict,
@@ -120,7 +239,6 @@ export function initSocket(server: HttpServer): SocketIOServer {
           executionTime: submission.executionTime,
         });
 
-        // If accepted, end the battle
         if (submission.verdict === "accepted") {
           const [battle] = await db
             .select()
@@ -135,34 +253,41 @@ export function initSocket(server: HttpServer): SocketIOServer {
               .where(eq(battlesTable.id, battleId))
               .returning();
 
-            // Update ELO ratings
             if (updatedBattle.player1Id && updatedBattle.player2Id) {
-              const [p1] = await db.select().from(usersTable).where(eq(usersTable.id, updatedBattle.player1Id)).limit(1);
-              const [p2] = await db.select().from(usersTable).where(eq(usersTable.id, updatedBattle.player2Id)).limit(1);
+              const [p1] = await db
+                .select()
+                .from(usersTable)
+                .where(eq(usersTable.id, updatedBattle.player1Id))
+                .limit(1);
+              const [p2] = await db
+                .select()
+                .from(usersTable)
+                .where(eq(usersTable.id, updatedBattle.player2Id))
+                .limit(1);
 
               if (p1 && p2) {
                 const player1Won = updatedBattle.winnerId === p1.id;
                 const { newRating1, newRating2 } = updateElo(p1.rating, p2.rating, player1Won);
 
-                await db.update(usersTable)
-                  .set({
-                    rating: newRating1,
-                    wins: player1Won ? p1.wins + 1 : p1.wins,
-                    losses: player1Won ? p1.losses : p1.losses + 1,
-                  })
-                  .where(eq(usersTable.id, p1.id));
+                await db.update(usersTable).set({
+                  rating: newRating1,
+                  wins: player1Won ? p1.wins + 1 : p1.wins,
+                  losses: player1Won ? p1.losses : p1.losses + 1,
+                }).where(eq(usersTable.id, p1.id));
 
-                await db.update(usersTable)
-                  .set({
-                    rating: newRating2,
-                    wins: player1Won ? p2.wins : p2.wins + 1,
-                    losses: player1Won ? p2.losses + 1 : p2.losses,
-                  })
-                  .where(eq(usersTable.id, p2.id));
+                await db.update(usersTable).set({
+                  rating: newRating2,
+                  wins: player1Won ? p2.wins : p2.wins + 1,
+                  losses: player1Won ? p2.losses + 1 : p2.losses,
+                }).where(eq(usersTable.id, p2.id));
               }
             }
 
-            const winnerUser = await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+            const winnerUser = await db
+              .select({ username: usersTable.username })
+              .from(usersTable)
+              .where(eq(usersTable.id, userId))
+              .limit(1);
 
             io.to(`battle:${battleId}`).emit("battleEnded", {
               battleId,
@@ -178,8 +303,18 @@ export function initSocket(server: HttpServer): SocketIOServer {
       }
     });
 
+    // ── Disconnect: clean up spectator tracking ───────────────────────────────
     socket.on("disconnect", () => {
       logger.info({ socketId: socket.id }, "Socket disconnected");
+      for (const [battleId, room] of battleRooms.entries()) {
+        if (room.spectatorSocketIds.has(socket.id)) {
+          room.spectatorSocketIds.delete(socket.id);
+          room.spectatorUsernames.delete(socket.id);
+          io.to(`battle:${battleId}`).emit("spectatorCount", {
+            count: room.spectatorSocketIds.size,
+          });
+        }
+      }
     });
   });
 

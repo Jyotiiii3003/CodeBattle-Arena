@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, sql } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { db, battlesTable, usersTable, problemsTable } from "@workspace/db";
 import { CreateBattleBody, GetBattleParams, JoinBattleBody } from "@workspace/api-zod";
 import { requireAuth, type AuthRequest } from "../lib/auth";
@@ -25,6 +25,10 @@ async function formatBattle(battle: typeof battlesTable.$inferSelect) {
     ? (await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.id, battle.winnerId)).limit(1))[0]
     : null;
 
+  const socketState = getBattleSocketState();
+  const room = socketState.get(battle.id);
+  const spectatorCount = room ? room.spectatorSocketIds.size : 0;
+
   return {
     id: battle.id,
     inviteCode: battle.inviteCode,
@@ -40,6 +44,7 @@ async function formatBattle(battle: typeof battlesTable.$inferSelect) {
     startTime: battle.startTime?.toISOString() ?? null,
     endTime: battle.endTime?.toISOString() ?? null,
     createdAt: battle.createdAt.toISOString(),
+    spectatorCount,
   };
 }
 
@@ -53,7 +58,6 @@ router.post("/battles", requireAuth, async (req: AuthRequest, res): Promise<void
   const userId = req.user!.userId;
   let inviteCode = generateInviteCode();
 
-  // ensure uniqueness
   let existing;
   do {
     inviteCode = generateInviteCode();
@@ -64,7 +68,6 @@ router.post("/battles", requireAuth, async (req: AuthRequest, res): Promise<void
       .limit(1);
   } while (existing);
 
-  // Pick random problem if not specified
   let problemId = parsed.data.problemId ?? null;
   if (!problemId) {
     const [randomProblem] = await db
@@ -77,14 +80,22 @@ router.post("/battles", requireAuth, async (req: AuthRequest, res): Promise<void
 
   const [battle] = await db
     .insert(battlesTable)
-    .values({
-      inviteCode,
-      player1Id: userId,
-      problemId,
-    })
+    .values({ inviteCode, player1Id: userId, problemId })
     .returning();
 
   res.status(201).json(await formatBattle(battle));
+});
+
+router.get("/battles/active", async (_req, res): Promise<void> => {
+  const battles = await db
+    .select()
+    .from(battlesTable)
+    .where(eq(battlesTable.status, "active"))
+    .orderBy(desc(battlesTable.startTime))
+    .limit(20);
+
+  const formatted = await Promise.all(battles.map(formatBattle));
+  res.json({ battles: formatted });
 });
 
 router.get("/battles/:id", async (req, res): Promise<void> => {

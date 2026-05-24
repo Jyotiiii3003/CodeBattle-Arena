@@ -12,6 +12,7 @@ import Problems from "@/pages/problems";
 import Problem from "@/pages/problem";
 import BattleLobby from "@/pages/battle-lobby";
 import BattleRoom from "@/pages/battle-room";
+import Spectate from "@/pages/spectate";
 import Leaderboard from "@/pages/leaderboard";
 import Profile from "@/pages/profile";
 import NotFound from "@/pages/not-found";
@@ -28,6 +29,7 @@ function Router() {
       <Route path="/problems/:id" component={() => <AuthGuard><Problem /></AuthGuard>} />
       <Route path="/battle" component={() => <AuthGuard><BattleLobby /></AuthGuard>} />
       <Route path="/battle/:id" component={() => <AuthGuard><BattleRoom /></AuthGuard>} />
+      <Route path="/spectate/:id" component={Spectate} />
       <Route path="/leaderboard" component={Leaderboard} />
       <Route path="/profile/:username" component={Profile} />
       <Route component={NotFound} />
