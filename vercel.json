@@ -1,0 +1,12 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "https://codebattle-arena-yejp.onrender.com/api/$1"
+    },
+    {
+      "source": "/socket.io/(.*)",
+      "destination": "https://codebattle-arena-yejp.onrender.com/socket.io/$1"
+    }
+  ]
+}
