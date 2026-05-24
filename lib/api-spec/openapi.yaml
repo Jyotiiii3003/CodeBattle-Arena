@@ -3,20 +3,32 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: CodeBattle Arena API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Authentication
+  - name: users
+    description: User profiles
+  - name: problems
+    description: Coding problems
+  - name: submissions
+    description: Code submissions
+  - name: battles
+    description: Battle rooms
+  - name: leaderboard
+    description: Leaderboard
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,7 +36,357 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # AUTH
+  /auth/register:
+    post:
+      operationId: register
+      tags: [auth]
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterInput"
+      responses:
+        "201":
+          description: Registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Bad request
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginInput"
+      responses:
+        "200":
+          description: Logged in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Unauthorized
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current user
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Unauthorized
+
+  # USERS
+  /users/{username}:
+    get:
+      operationId: getUserProfile
+      tags: [users]
+      summary: Get user profile
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+        "404":
+          description: Not found
+
+  /users/{username}/submissions:
+    get:
+      operationId: getUserSubmissions
+      tags: [users]
+      summary: Get recent submissions for user
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Submissions list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Submission"
+
+  /users/{username}/battles:
+    get:
+      operationId: getUserBattles
+      tags: [users]
+      summary: Get battle history for user
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Battle history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Battle"
+
+  # PROBLEMS
+  /problems:
+    get:
+      operationId: listProblems
+      tags: [problems]
+      summary: List problems
+      parameters:
+        - name: difficulty
+          in: query
+          schema:
+            type: string
+            enum: [easy, medium, hard]
+        - name: tag
+          in: query
+          schema:
+            type: string
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Problems list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProblemListResponse"
+
+  /problems/{id}:
+    get:
+      operationId: getProblem
+      tags: [problems]
+      summary: Get a problem by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Problem detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Not found
+
+  # SUBMISSIONS
+  /submissions:
+    post:
+      operationId: submitCode
+      tags: [submissions]
+      summary: Submit code for a problem
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubmissionInput"
+      responses:
+        "201":
+          description: Submission result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Submission"
+        "400":
+          description: Bad request
+        "401":
+          description: Unauthorized
+
+  /submissions/{id}:
+    get:
+      operationId: getSubmission
+      tags: [submissions]
+      summary: Get submission by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Submission detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Submission"
+        "404":
+          description: Not found
+
+  # BATTLES
+  /battles:
+    post:
+      operationId: createBattle
+      tags: [battles]
+      summary: Create a new battle room
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BattleInput"
+      responses:
+        "201":
+          description: Battle room created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Battle"
+        "401":
+          description: Unauthorized
+
+  /battles/{id}:
+    get:
+      operationId: getBattle
+      tags: [battles]
+      summary: Get battle by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Battle detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Battle"
+        "404":
+          description: Not found
+
+  /battles/join:
+    post:
+      operationId: joinBattle
+      tags: [battles]
+      summary: Join a battle by invite code
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JoinBattleInput"
+      responses:
+        "200":
+          description: Joined battle
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Battle"
+        "404":
+          description: Room not found
+
+  # LEADERBOARD
+  /leaderboard:
+    get:
+      operationId: getLeaderboard
+      tags: [leaderboard]
+      summary: Get leaderboard
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Leaderboard
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeaderboardResponse"
+
+  # STATS (wow endpoints)
+  /stats/overview:
+    get:
+      operationId: getStats
+      tags: [leaderboard]
+      summary: Get platform stats overview
+      responses:
+        "200":
+          description: Platform statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlatformStats"
+
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
   schemas:
     HealthStatus:
       type: object
@@ -34,3 +396,312 @@ components:
       required:
         - status
 
+    # AUTH
+    RegisterInput:
+      type: object
+      required: [username, email, password]
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 20
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 6
+
+    LoginInput:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+
+    AuthResponse:
+      type: object
+      required: [token, user]
+      properties:
+        token:
+          type: string
+        user:
+          $ref: "#/components/schemas/User"
+
+    # USER
+    User:
+      type: object
+      required: [id, username, email, rating, wins, losses, rank, createdAt]
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        email:
+          type: string
+        rating:
+          type: integer
+        wins:
+          type: integer
+        losses:
+          type: integer
+        rank:
+          type: string
+        solvedCount:
+          type: integer
+        createdAt:
+          type: string
+
+    UserProfile:
+      type: object
+      required: [id, username, rating, wins, losses, rank, solvedCount, createdAt]
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        rating:
+          type: integer
+        wins:
+          type: integer
+        losses:
+          type: integer
+        rank:
+          type: string
+        solvedCount:
+          type: integer
+        createdAt:
+          type: string
+        winRate:
+          type: number
+
+    # PROBLEM
+    TestCase:
+      type: object
+      required: [input, expectedOutput]
+      properties:
+        input:
+          type: string
+        expectedOutput:
+          type: string
+
+    Example:
+      type: object
+      required: [input, output]
+      properties:
+        input:
+          type: string
+        output:
+          type: string
+        explanation:
+          type: ["string", "null"]
+
+    Problem:
+      type: object
+      required: [id, title, description, difficulty, tags, starterCode]
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        description:
+          type: string
+        difficulty:
+          type: string
+          enum: [easy, medium, hard]
+        constraints:
+          type: ["string", "null"]
+        examples:
+          type: array
+          items:
+            $ref: "#/components/schemas/Example"
+        tags:
+          type: array
+          items:
+            type: string
+        starterCode:
+          type: object
+          additionalProperties:
+            type: string
+        solvedBy:
+          type: integer
+
+    ProblemListResponse:
+      type: object
+      required: [problems, total, page, totalPages]
+      properties:
+        problems:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProblemSummary"
+        total:
+          type: integer
+        page:
+          type: integer
+        totalPages:
+          type: integer
+
+    ProblemSummary:
+      type: object
+      required: [id, title, difficulty, tags, solvedBy]
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        difficulty:
+          type: string
+          enum: [easy, medium, hard]
+        tags:
+          type: array
+          items:
+            type: string
+        solvedBy:
+          type: integer
+
+    # SUBMISSION
+    SubmissionInput:
+      type: object
+      required: [problemId, language, code]
+      properties:
+        problemId:
+          type: integer
+        battleId:
+          type: ["integer", "null"]
+        language:
+          type: string
+          enum: [cpp, java, python, javascript]
+        code:
+          type: string
+
+    Submission:
+      type: object
+      required: [id, problemId, language, code, verdict, createdAt]
+      properties:
+        id:
+          type: integer
+        userId:
+          type: ["integer", "null"]
+        problemId:
+          type: integer
+        battleId:
+          type: ["integer", "null"]
+        language:
+          type: string
+        code:
+          type: string
+        verdict:
+          type: string
+          enum: [accepted, wrong_answer, runtime_error, compilation_error, time_limit_exceeded, pending]
+        executionTime:
+          type: ["number", "null"]
+        output:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+
+    # BATTLE
+    BattleInput:
+      type: object
+      properties:
+        problemId:
+          type: ["integer", "null"]
+
+    JoinBattleInput:
+      type: object
+      required: [inviteCode]
+      properties:
+        inviteCode:
+          type: string
+
+    Battle:
+      type: object
+      required: [id, inviteCode, status, createdAt]
+      properties:
+        id:
+          type: integer
+        inviteCode:
+          type: string
+        player1Id:
+          type: ["integer", "null"]
+        player2Id:
+          type: ["integer", "null"]
+        player1Username:
+          type: ["string", "null"]
+        player2Username:
+          type: ["string", "null"]
+        problemId:
+          type: ["integer", "null"]
+        problemTitle:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [waiting, active, finished]
+        winnerId:
+          type: ["integer", "null"]
+        winnerUsername:
+          type: ["string", "null"]
+        startTime:
+          type: ["string", "null"]
+        endTime:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+
+    # LEADERBOARD
+    LeaderboardEntry:
+      type: object
+      required: [rank, userId, username, rating, wins, losses, winRate]
+      properties:
+        rank:
+          type: integer
+        userId:
+          type: integer
+        username:
+          type: string
+        rating:
+          type: integer
+        wins:
+          type: integer
+        losses:
+          type: integer
+        winRate:
+          type: number
+        tier:
+          type: string
+
+    LeaderboardResponse:
+      type: object
+      required: [entries, total, page, totalPages]
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/LeaderboardEntry"
+        total:
+          type: integer
+        page:
+          type: integer
+        totalPages:
+          type: integer
+
+    PlatformStats:
+      type: object
+      required: [totalUsers, totalBattles, totalSubmissions, totalProblems]
+      properties:
+        totalUsers:
+          type: integer
+        totalBattles:
+          type: integer
+        totalSubmissions:
+          type: integer
+        totalProblems:
+          type: integer
+        activeBattles:
+          type: integer
+        topPlayers:
+          type: array
+          items:
+            $ref: "#/components/schemas/LeaderboardEntry"

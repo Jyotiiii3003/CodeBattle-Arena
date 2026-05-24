@@ -1,0 +1,651 @@
+You are a senior full-stack engineer, UI/UX designer, and software architect.
+
+Build a production-grade full-stack web application called "CodeBattle Arena".
+
+IMPORTANT:
+This project is being built INSIDE REPLIT.
+
+You must build it fully compatible with Replit and ensure it runs directly without manual fixing.
+
+Do NOT stop after planning.
+
+Do NOT ask for confirmation.
+
+Do NOT generate pseudo code.
+
+Build the complete MVP directly.
+
+==================================================
+PROJECT OVERVIEW
+==================================================
+
+CodeBattle Arena is a premium real-time coding battle platform.
+
+Users should be able to:
+
+- Register and login
+- Solve coding problems
+- Practice coding
+- Battle friends live
+- Join duel rooms
+- Get Judge0 code execution
+- Earn ELO ratings
+- View leaderboard
+- Track wins and losses
+
+The product should feel like:
+
+- Codeforces
+- LeetCode
+- Valorant UI
+- Esports gaming experience
+
+UI and functionality are equally important.
+
+==================================================
+REPLIT REQUIREMENTS
+==================================================
+
+Build specifically for Replit.
+
+Use monorepo structure:
+
+/
+client
+/server
+
+Project must run with:
+
+npm install
+npm run dev
+
+No broken scripts.
+
+No missing configs.
+
+Create all setup files automatically.
+
+Required:
+
+- package.json
+- vite.config.js
+- tailwind.config.js
+- postcss.config.js
+- .env.example
+- .gitignore
+
+Use Replit Secrets for env variables.
+
+Avoid localhost hardcoding.
+
+Use environment-based API URLs.
+
+Frontend and backend must work together inside Replit.
+
+Create root scripts:
+
+dev
+client
+server
+build
+start
+
+Use concurrent development.
+
+==================================================
+TECH STACK (STRICT)
+==================================================
+
+Frontend:
+
+- React
+- Vite
+- TailwindCSS
+- Framer Motion
+- React Router DOM
+- Axios
+- Monaco Editor
+- React Hot Toast
+
+Backend:
+
+- Node.js
+- Express.js
+- MongoDB Atlas
+- Mongoose
+- Socket.io
+- JWT
+- bcrypt
+- Express Validator
+- Express Rate Limit
+
+Execution:
+
+- Judge0 CE API
+
+Deployment:
+
+- Replit compatible
+
+Do NOT use:
+
+- Firebase
+- Bootstrap
+- Material UI
+- Next.js
+
+==================================================
+PROJECT STRUCTURE
+==================================================
+
+Frontend:
+
+src/
+components/
+pages/
+layouts/
+hooks/
+context/
+services/
+utils/
+
+Backend:
+
+controllers/
+routes/
+models/
+middleware/
+services/
+socket/
+config/
+utils/
+
+Use clean modular architecture.
+
+==================================================
+AUTH SYSTEM
+==================================================
+
+Implement JWT auth.
+
+Features:
+
+- Register
+- Login
+- Logout
+- Protected routes
+- Persistent auth
+
+Use bcrypt.
+
+User schema:
+
+{
+username,
+email,
+password,
+rating:1000,
+wins:0,
+losses:0,
+solvedProblems:[],
+createdAt
+}
+
+==================================================
+DATABASE MODELS
+==================================================
+
+User
+
+{
+username,
+email,
+password,
+rating,
+wins,
+losses,
+solvedProblems
+}
+
+Problem
+
+{
+title,
+description,
+difficulty,
+constraints,
+examples,
+starterCode,
+testCases,
+tags
+}
+
+Battle
+
+{
+player1,
+player2,
+problemId,
+status,
+winner,
+startTime,
+endTime
+}
+
+Submission
+
+{
+userId,
+problemId,
+battleId,
+language,
+code,
+verdict,
+executionTime,
+createdAt
+}
+
+==================================================
+PRACTICE MODE
+==================================================
+
+Create solo practice.
+
+Features:
+
+- Problem list
+- Search
+- Difficulty filters
+- Monaco editor
+- Run code
+- Submit code
+- Verdict
+- Execution time
+- Saved submissions
+
+Languages:
+
+- C++
+- Java
+- Python
+- JavaScript
+
+==================================================
+JUDGE0
+==================================================
+
+Integrate Judge0 CE.
+
+Flow:
+
+Submit
+→ Backend
+→ Judge0
+→ Poll
+→ Verdict
+→ Save
+→ Frontend
+
+Verdicts:
+
+- Accepted
+- Wrong Answer
+- Runtime Error
+- Compilation Error
+- TLE
+
+Reusable service.
+
+Env-based config.
+
+==================================================
+REAL-TIME DUEL MODE
+==================================================
+
+MAIN FEATURE.
+
+Use Socket.io.
+
+Flow:
+
+Player A:
+Create room.
+
+Generate invite code.
+
+Player B:
+Join.
+
+When both join:
+
+- Same problem
+- Synced timer
+- Live battle
+
+Socket events:
+
+createRoom
+joinRoom
+startBattle
+submitCode
+battleEnded
+disconnect
+
+Battle UI:
+
+LEFT:
+Problem statement
+
+TOP:
+Timer
+Battle status
+Opponent info
+
+RIGHT:
+Monaco editor
+
+BOTTOM:
+Run
+Submit
+Language selector
+
+Live updates.
+
+==================================================
+WINNER LOGIC
+==================================================
+
+Winner:
+
+Priority 1:
+First Accepted.
+
+If timeout:
+
+- Higher score
+- Faster execution
+
+Store history.
+
+==================================================
+ELO SYSTEM
+==================================================
+
+Default:
+
+1000
+
+Formula:
+
+Old +
+32 × (Actual − Expected)
+
+Ranks:
+
+1000–1199 Beginner
+1200–1399 Pupil
+1400–1599 Specialist
+1600+ Expert
+
+Update after battles.
+
+==================================================
+LEADERBOARD
+==================================================
+
+Show:
+
+- Rank
+- Username
+- Rating
+- Wins
+- Losses
+- Win rate
+
+Search and pagination.
+
+==================================================
+PROFILE
+==================================================
+
+Show:
+
+- Avatar placeholder
+- Username
+- Rating
+- Rank badge
+- Solved count
+- Wins
+- Losses
+- Match history
+
+==================================================
+ADVANCED GAMING UI (VERY HIGH PRIORITY)
+==================================================
+
+The UI must NOT look generic.
+
+No default Tailwind cards.
+
+No admin dashboard look.
+
+Must feel like:
+
+- Valorant
+- Cyberpunk
+- Gaming launcher
+- Esports HUD
+
+==================================================
+THEME
+==================================================
+
+Dark mode ONLY.
+
+Palette:
+
+Primary:
+- Black
+- Charcoal
+- Midnight blue
+
+Accent:
+- Neon blue
+- Cyan
+- Electric purple
+
+Use:
+
+- Glow
+- Glassmorphism
+- Gradient lighting
+- Layered depth
+
+==================================================
+TYPOGRAPHY
+==================================================
+
+Use multiple fonts.
+
+Hero:
+
+- Orbitron
+- Audiowide
+
+Battle:
+
+- Rajdhani
+- Oxanium
+
+Content:
+
+- Inter
+- Poppins
+
+Code:
+
+- JetBrains Mono
+
+Different sections should have visual identity.
+
+==================================================
+ANIMATION
+==================================================
+
+Use Framer Motion heavily.
+
+Implement:
+
+- Page transitions
+- Hover glow
+- Animated cards
+- Motion entrances
+- Floating effects
+- Loading animation
+- Button interaction
+
+Smooth and premium.
+
+Performance optimized.
+
+==================================================
+LANDING PAGE
+==================================================
+
+Create cinematic landing page.
+
+Hero:
+- Huge typography
+- Animated background
+- Neon effects
+- CTA
+
+Features:
+- Animated cards
+
+Battle Preview
+
+Leaderboard Preview
+
+Final CTA
+
+==================================================
+BATTLE ROOM (MOST IMPORTANT)
+==================================================
+
+Feels like entering an arena.
+
+Use:
+
+- Glassmorphism
+- Neon borders
+- HUD design
+- Glow
+- Dynamic panels
+
+Verdict effects:
+
+Accepted:
+Green glow animation
+
+Wrong:
+Red flash
+
+Victory:
+Celebration animation
+
+==================================================
+BACKGROUND
+==================================================
+
+Subtle animated background.
+
+Possible:
+
+- Particles
+- Blur lights
+- Grid glow
+- Gradient motion
+
+No performance issues.
+
+==================================================
+ERROR HANDLING
+==================================================
+
+Frontend:
+
+- Toasts
+- Skeleton loading
+- Empty states
+
+Backend:
+
+- Centralized error middleware
+- Validation
+- Proper codes
+
+==================================================
+SECURITY
+==================================================
+
+Implement:
+
+- JWT middleware
+- Validation
+- Rate limiting
+- Sanitization
+- Protected APIs
+
+==================================================
+SEED DATA
+==================================================
+
+Add 10–15 problems.
+
+Easy:
+Two Sum
+Prime
+
+Medium:
+Binary Search
+Merge Intervals
+
+Hard:
+Graph traversal
+
+==================================================
+README
+==================================================
+
+Generate professional README.
+
+Include:
+
+- Features
+- Setup
+- Stack
+- API
+- Deployment
+- Structure
+
+==================================================
+FINAL RULE
+==================================================
+
+Build COMPLETE MVP.
+
+Do not stop after planning.
+
+Create working files.
+
+Create dependencies.
+
+Create runnable project.
+
+Priorities:
+
+1. Working product
+2. Premium gaming UI
+3. Replit compatibility
+4. Clean architecture
