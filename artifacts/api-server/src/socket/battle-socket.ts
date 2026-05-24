@@ -12,6 +12,14 @@ interface PlayerCodeState {
   lastVerdict?: string;
 }
 
+interface ChatMessage {
+  id: string;
+  username: string;
+  text: string;
+  ts: number;
+  role: "spectator" | "player" | "system";
+}
+
 interface BattleRoom {
   player1SocketId?: string;
   player2SocketId?: string;
@@ -22,6 +30,7 @@ interface BattleRoom {
   spectatorSocketIds: Set<string>;
   spectatorUsernames: Map<string, string>;
   playerCode: Map<number, PlayerCodeState>;
+  chatHistory: ChatMessage[];
 }
 
 const battleRooms = new Map<number, BattleRoom>();
@@ -43,8 +52,21 @@ function createRoom(): BattleRoom {
     spectatorSocketIds: new Set(),
     spectatorUsernames: new Map(),
     playerCode: new Map(),
+    chatHistory: [],
   };
 }
+
+function makeSystemMessage(text: string): ChatMessage {
+  return {
+    id: `sys-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    username: "ARENA",
+    text,
+    ts: Date.now(),
+    role: "system",
+  };
+}
+
+const MAX_CHAT_HISTORY = 200;
 
 export function initSocket(server: HttpServer): SocketIOServer {
   const io = new SocketIOServer(server, {
@@ -95,13 +117,8 @@ export function initSocket(server: HttpServer): SocketIOServer {
           room.player2UserId = userId;
         }
 
-        logger.info({ battleId, userId }, "Player joined room");
-
-        // Send existing code state to reconnecting player
         const myCode = room.playerCode.get(userId);
-        if (myCode) {
-          socket.emit("codeState", { userId, ...myCode });
-        }
+        if (myCode) socket.emit("codeState", { userId, ...myCode });
 
         if (battle.status === "active" && room.player1SocketId && room.player2SocketId) {
           io.to(`battle:${battleId}`).emit("battleStarted", {
@@ -111,8 +128,8 @@ export function initSocket(server: HttpServer): SocketIOServer {
         }
 
         socket.emit("joinedRoom", { battleId, status: battle.status });
+        socket.emit("chatHistory", { messages: room.chatHistory });
 
-        // Broadcast updated spectator count
         io.to(`battle:${battleId}`).emit("spectatorCount", {
           count: room.spectatorSocketIds.size,
         });
@@ -150,15 +167,17 @@ export function initSocket(server: HttpServer): SocketIOServer {
         }
 
         const room = battleRooms.get(battleId)!;
+        const displayName = username?.trim() || "Guest";
         room.spectatorSocketIds.add(socket.id);
-        room.spectatorUsernames.set(socket.id, username ?? "Guest");
+        room.spectatorUsernames.set(socket.id, displayName);
 
-        logger.info({ battleId, spectatorSocketId: socket.id, username }, "Spectator joined");
-
-        // Send current code state to the new spectator
+        // Send current code state to new spectator
         for (const [playerId, state] of room.playerCode.entries()) {
           socket.emit("codeUpdate", { userId: playerId, ...state });
         }
+
+        // Send chat history
+        socket.emit("chatHistory", { messages: room.chatHistory });
 
         socket.emit("spectating", {
           battleId,
@@ -166,14 +185,45 @@ export function initSocket(server: HttpServer): SocketIOServer {
           spectatorCount: room.spectatorSocketIds.size,
         });
 
-        // Broadcast updated spectator count to the whole room
+        // Announce join in chat
+        const joinMsg = makeSystemMessage(`👁 ${displayName} joined as spectator`);
+        room.chatHistory.push(joinMsg);
+        if (room.chatHistory.length > MAX_CHAT_HISTORY) room.chatHistory.shift();
+        io.to(`battle:${battleId}`).emit("chat:message", joinMsg);
+
         io.to(`battle:${battleId}`).emit("spectatorCount", {
           count: room.spectatorSocketIds.size,
         });
+
+        logger.info({ battleId, username: displayName }, "Spectator joined");
       } catch (err) {
         logger.error({ err }, "spectate error");
         socket.emit("error", { message: "Failed to spectate" });
       }
+    });
+
+    // ── Chat message from spectator or player ─────────────────────────────────
+    socket.on("chat:send", ({
+      battleId, username, text, role,
+    }: { battleId: number; username: string; text: string; role?: "spectator" | "player" }) => {
+      const room = battleRooms.get(battleId);
+      if (!room) return;
+
+      const trimmed = text?.trim().slice(0, 300);
+      if (!trimmed) return;
+
+      const msg: ChatMessage = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        username: username?.trim().slice(0, 32) || "Anonymous",
+        text: trimmed,
+        ts: Date.now(),
+        role: role ?? "spectator",
+      };
+
+      room.chatHistory.push(msg);
+      if (room.chatHistory.length > MAX_CHAT_HISTORY) room.chatHistory.shift();
+
+      io.to(`battle:${battleId}`).emit("chat:message", msg);
     });
 
     // ── Player broadcasts their code to spectators ───────────────────────────
@@ -183,14 +233,12 @@ export function initSocket(server: HttpServer): SocketIOServer {
       const room = battleRooms.get(battleId);
       if (!room) return;
 
-      // Update stored code state
       room.playerCode.set(userId, {
         code,
         language,
         lastVerdict: room.playerCode.get(userId)?.lastVerdict,
       });
 
-      // Forward to spectators (not back to the player who sent it)
       socket.to(`battle:${battleId}`).emit("codeUpdate", { userId, code, language });
     });
 
@@ -219,13 +267,10 @@ export function initSocket(server: HttpServer): SocketIOServer {
           return;
         }
 
-        // Update stored verdict for spectators
         const room = battleRooms.get(battleId);
         if (room) {
           const existing = room.playerCode.get(userId);
-          if (existing) {
-            existing.lastVerdict = submission.verdict;
-          }
+          if (existing) existing.lastVerdict = submission.verdict;
         }
 
         io.to(`battle:${battleId}`).emit("opponentSubmitted", {
@@ -238,6 +283,21 @@ export function initSocket(server: HttpServer): SocketIOServer {
           verdict: submission.verdict,
           executionTime: submission.executionTime,
         });
+
+        // Announce submission result in chat
+        if (room) {
+          const [user] = await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+          const uname = user?.username ?? "Player";
+          const verdictLabel = submission.verdict.replace(/_/g, " ").toUpperCase();
+          const submitMsg = makeSystemMessage(
+            submission.verdict === "accepted"
+              ? `🏆 ${uname} got ACCEPTED!`
+              : `⚡ ${uname} submitted — ${verdictLabel}`
+          );
+          room.chatHistory.push(submitMsg);
+          if (room.chatHistory.length > MAX_CHAT_HISTORY) room.chatHistory.shift();
+          io.to(`battle:${battleId}`).emit("chat:message", submitMsg);
+        }
 
         if (submission.verdict === "accepted") {
           const [battle] = await db
@@ -254,16 +314,8 @@ export function initSocket(server: HttpServer): SocketIOServer {
               .returning();
 
             if (updatedBattle.player1Id && updatedBattle.player2Id) {
-              const [p1] = await db
-                .select()
-                .from(usersTable)
-                .where(eq(usersTable.id, updatedBattle.player1Id))
-                .limit(1);
-              const [p2] = await db
-                .select()
-                .from(usersTable)
-                .where(eq(usersTable.id, updatedBattle.player2Id))
-                .limit(1);
+              const [p1] = await db.select().from(usersTable).where(eq(usersTable.id, updatedBattle.player1Id)).limit(1);
+              const [p2] = await db.select().from(usersTable).where(eq(usersTable.id, updatedBattle.player2Id)).limit(1);
 
               if (p1 && p2) {
                 const player1Won = updatedBattle.winnerId === p1.id;
@@ -308,8 +360,15 @@ export function initSocket(server: HttpServer): SocketIOServer {
       logger.info({ socketId: socket.id }, "Socket disconnected");
       for (const [battleId, room] of battleRooms.entries()) {
         if (room.spectatorSocketIds.has(socket.id)) {
+          const username = room.spectatorUsernames.get(socket.id) ?? "Guest";
           room.spectatorSocketIds.delete(socket.id);
           room.spectatorUsernames.delete(socket.id);
+
+          const leaveMsg = makeSystemMessage(`👁 ${username} left`);
+          room.chatHistory.push(leaveMsg);
+          if (room.chatHistory.length > MAX_CHAT_HISTORY) room.chatHistory.shift();
+          io.to(`battle:${battleId}`).emit("chat:message", leaveMsg);
+
           io.to(`battle:${battleId}`).emit("spectatorCount", {
             count: room.spectatorSocketIds.size,
           });
