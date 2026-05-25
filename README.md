@@ -199,44 +199,6 @@ CodeBattle-Arena/
 
 ---
 
-# 📸 Screenshots
-
-## Home Page
-
-
-
-```md
-
-![Home](<img width="1918" height="821" alt="Screenshot 2026-05-25 143553" src="https://github.com/user-attachments/assets/df5d8728-c0f3-4699-9468-6292261fca84" />
-)
-```
-
----
-
-## Battle Arena
-
-```md
-![Battle](screenshots/battle.png)
-```
-
----
-
-## Leaderboard
-
-```md
-![Leaderboard](screenshots/leaderboard.png)
-```
-
----
-
-## Code Editor
-
-```md
-![Editor](screenshots/editor.png)
-```
-
----
-
 # 🔌 API Overview
 
 ## Stats
