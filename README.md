@@ -203,10 +203,12 @@ CodeBattle-Arena/
 
 ## Home Page
 
-Add screenshot here
+
 
 ```md
-![Home](screenshots/home.png)
+
+![Home](<img width="1918" height="821" alt="Screenshot 2026-05-25 143553" src="https://github.com/user-attachments/assets/df5d8728-c0f3-4699-9468-6292261fca84" />
+)
 ```
 
 ---
